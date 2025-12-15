@@ -1,0 +1,208 @@
+use std::io::{self, Write, Read};
+use std::time::Duration;
+use std::thread;
+
+fn initialize_terminal() {
+    print!("\x1b[?1049h");
+    print!("\x1b[?25l");
+    flush_stdout();
+    
+    #[cfg(unix)]
+    {
+        use std::os::unix::io::AsRawFd;
+        unsafe {
+            let mut termios: libc::termios = std::mem::zeroed();
+            libc::tcgetattr(io::stdin().as_raw_fd(), &mut termios);
+            termios.c_lflag &= !(libc::ICANON | libc::ECHO);
+            termios.c_cc[libc::VMIN] = 0;
+            termios.c_cc[libc::VTIME] = 0;
+            libc::tcsetattr(io::stdin().as_raw_fd(), libc::TCSANOW, &termios);
+        }
+    }
+}
+
+fn restore_terminal() {
+    print!("\x1b[?1049l");
+    print!("\x1b[?25h");
+    flush_stdout();
+    
+    #[cfg(unix)]
+    {
+        use std::os::unix::io::AsRawFd;
+        unsafe {
+            let mut termios: libc::termios = std::mem::zeroed();
+            libc::tcgetattr(io::stdin().as_raw_fd(), &mut termios);
+            termios.c_lflag |= libc::ICANON | libc::ECHO;
+            libc::tcsetattr(io::stdin().as_raw_fd(), libc::TCSANOW, &termios);
+        }
+    }
+}
+
+fn get_terminal_size() -> (i32, i32) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::io::AsRawFd;
+        unsafe {
+            let mut size: libc::winsize = std::mem::zeroed();
+            libc::ioctl(io::stdout().as_raw_fd(), libc::TIOCGWINSZ, &mut size);
+            (size.ws_col as i32, size.ws_row as i32)
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        (80, 24)
+    }
+}
+
+fn sleep_for_frame_time() {
+    thread::sleep(Duration::from_millis(100));
+}
+
+fn read_key() -> Option<String> {
+    let mut buffer = [0u8; 3];
+    match io::stdin().read(&mut buffer) {
+        Ok(n) if n > 0 => {
+            if buffer[0] == 27 && n >= 3 && buffer[1] == 91 {
+                match buffer[2] {
+                    65 => Some("UP".to_string()),
+                    66 => Some("DOWN".to_string()),
+                    67 => Some("RIGHT".to_string()),
+                    68 => Some("LEFT".to_string()),
+                    _ => None,
+                }
+            } else {
+                Some((buffer[0] as char).to_string())
+            }
+        }
+        _ => None,
+    }
+}
+
+fn clear_screen() {
+    print!("\x1b[2J");
+}
+
+fn draw_char(x: i32, y: i32, c: char, col: i32) {
+    print!("\x1b[{};{}H\x1b[{}m{}", y + 1, x + 1, col, c);
+}
+
+fn flush_stdout() {
+    io::stdout().flush().unwrap();
+}
+
+fn get_pipe_char(from_dir: i32, to_dir: i32) -> char {
+    match (from_dir, to_dir) {
+        (0, 0) | (2, 2) => '┃',
+        (1, 1) | (3, 3) => '━',
+        (3, 0) | (2, 1) => '┗',
+        (0, 1) | (3, 2) => '┏',
+        (1, 2) | (0, 3) => '┓',
+        (2, 3) | (1, 0) => '┛',
+        _ => '━',
+    }
+}
+
+fn draw_border(width: i32, height: i32, color: i32) {
+    for x in 0..width {
+        draw_char(x, 0, if x == 0 { '┏' } else if x == width - 1 { '┓' } else { '━' }, color);
+        draw_char(x, height - 1, if x == 0 { '┗' } else if x == width - 1 { '┛' } else { '━' }, color);
+    }
+
+    for y in 1..height - 1 {
+        draw_char(0, y, '┃', color);
+        draw_char(width - 1, y, '┃', color);
+    }
+}
+
+
+fn main() {
+    const UP: i32 = 0;
+    const RIGHT: i32 = 1;
+    const DOWN: i32 = 2;
+    const LEFT: i32 = 3;
+    const RED: i32 = 31;
+    const GREEN: i32 = 32;
+    const YELLOW: i32 = 33;
+    const BLUE: i32 = 34;
+    const GRAY: i32 = 90;
+    const NEUTRAL: i32 = 0;
+
+
+    let mut COLOR: i32 = RED;
+    let mut player_dir: i32;
+    let mut head_x: i32;
+    let mut head_y: i32;
+
+    let mut body: Vec<(i32, i32, i32)> = Vec::new();
+    let max_length: usize = 20;
+
+    initialize_terminal();
+    let (grid_width, grid_height) = get_terminal_size();
+
+    head_x = grid_width / 2;
+    head_y = grid_height / 2;
+    player_dir = RIGHT;
+
+    loop {
+        sleep_for_frame_time();
+
+        if let Some(key) = read_key() {
+            let next_dir = match key.as_str() {
+                "w" | "UP" => UP,
+                "d" | "RIGHT" => RIGHT,
+                "s" | "DOWN" => DOWN,
+                "a" | "LEFT" => LEFT,
+                "q" => break,
+                _ => player_dir,
+            };
+
+            if (next_dir + 2) % 4 != player_dir {
+                player_dir = next_dir;
+            }
+        }
+
+        match player_dir {
+            UP    => head_y -= 1,
+            RIGHT => head_x += 1,
+            DOWN  => head_y += 1,
+            LEFT  => head_x -= 1,
+            _ => {}
+        }
+
+        if head_x < 1 {
+            head_x = grid_width - 2;
+        } else if head_x > grid_width - 2 {
+            head_x = 1;
+        }
+        
+        if head_y < 1 {
+            head_y = grid_height - 2;
+        } else if head_y > grid_height - 2 {
+            head_y = 1;
+        }
+
+        body.push((head_x, head_y, player_dir));
+
+        if body.len() > max_length {
+            body.remove(0);
+        }
+
+        clear_screen();
+        draw_border(grid_width, grid_height, COLOR);
+
+        for i in 0..body.len().saturating_sub(1) {
+            let (x, y, dir) = body[i];
+            let next_dir = if i + 1 < body.len() {
+                body[i + 1].2
+            } else {
+                dir
+            };
+            let pipe_char = get_pipe_char(dir, next_dir);
+            draw_char(x, y, pipe_char, COLOR);
+        }
+
+        flush_stdout();
+    }
+
+    restore_terminal();
+}
