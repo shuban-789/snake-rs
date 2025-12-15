@@ -7,8 +7,7 @@ fn initialize_terminal() {
     print!("\x1b[?25l");
     flush_stdout();
     
-    #[cfg(unix)]
-    {
+    #[cfg(unix)] {
         use std::os::unix::io::AsRawFd;
         unsafe {
             let mut termios: libc::termios = std::mem::zeroed();
@@ -26,8 +25,7 @@ fn restore_terminal() {
     print!("\x1b[?25h");
     flush_stdout();
     
-    #[cfg(unix)]
-    {
+    #[cfg(unix)] {
         use std::os::unix::io::AsRawFd;
         unsafe {
             let mut termios: libc::termios = std::mem::zeroed();
@@ -39,8 +37,7 @@ fn restore_terminal() {
 }
 
 fn get_terminal_size() -> (i32, i32) {
-    #[cfg(unix)]
-    {
+    #[cfg(unix)] {
         use std::os::unix::io::AsRawFd;
         unsafe {
             let mut size: libc::winsize = std::mem::zeroed();
@@ -48,8 +45,7 @@ fn get_terminal_size() -> (i32, i32) {
             (size.ws_col as i32, size.ws_row as i32)
         }
     }
-    #[cfg(not(unix))]
-    {
+    #[cfg(not(unix))] {
         (80, 24)
     }
 }
@@ -114,6 +110,13 @@ fn draw_border(width: i32, height: i32, color: i32) {
     }
 }
 
+fn draw_area(width: i32, height: i32, color: i32) {
+    for x in 1..width - 1 {
+        for y in 1..height - 1 {
+            draw_char(x, y, '+', color);
+        }
+    }
+}
 
 fn main() {
     const UP: i32 = 0;
@@ -127,8 +130,7 @@ fn main() {
     const GRAY: i32 = 90;
     const NEUTRAL: i32 = 0;
 
-
-    let mut COLOR: i32 = RED;
+    let mut COLOR: i32 = BLUE;
     let mut player_dir: i32;
     let mut head_x: i32;
     let mut head_y: i32;
@@ -143,8 +145,12 @@ fn main() {
     head_y = grid_height / 2;
     player_dir = RIGHT;
 
+    draw_border(grid_width, grid_height, COLOR);
+
     loop {
         sleep_for_frame_time();
+
+        draw_area(grid_width, grid_height, GRAY);
 
         if let Some(key) = read_key() {
             let next_dir = match key.as_str() {
@@ -160,6 +166,7 @@ fn main() {
                 player_dir = next_dir;
             }
         }
+
 
         match player_dir {
             UP    => head_y -= 1,
@@ -187,8 +194,6 @@ fn main() {
             body.remove(0);
         }
 
-        clear_screen();
-        draw_border(grid_width, grid_height, COLOR);
 
         for i in 0..body.len().saturating_sub(1) {
             let (x, y, dir) = body[i];
