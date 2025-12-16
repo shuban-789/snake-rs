@@ -1,6 +1,7 @@
 use std::io::{self, Write, Read};
 use std::time::Duration;
 use std::thread;
+use std::env;
 
 fn initialize_terminal() {
     print!("\x1b[?1049h");
@@ -118,6 +119,24 @@ fn draw_area(width: i32, height: i32, color: i32) {
     }
 }
 
+fn help() {
+    println!("snake-rs");
+    println!();
+    println!("Usage:");
+    println!("  snake-rs [options]");
+    println!();
+    println!("Options:");
+    println!("  -h, --help        Show this help and exit");
+    println!("  --color <n>       Set snake color (ANSI)");
+    println!();
+    println!("Controls:");
+    println!("  W / UP_ARROW      Up");
+    println!("  A / LEFT_ARROW    Left");
+    println!("  S / DOWN_ARROW    Down");
+    println!("  D / RIGHT_ARROW   Right");
+    println!("  Q                 Quit");
+}
+
 fn main() {
     const UP: i32 = 0;
     const RIGHT: i32 = 1;
@@ -129,8 +148,39 @@ fn main() {
     const BLUE: i32 = 34;
     const GRAY: i32 = 90;
     const NEUTRAL: i32 = 0;
+    let mut COLOR: i32 = NEUTRAL;
+    let args: Vec<String> = env::args().collect();
 
-    let mut COLOR: i32 = BLUE;
+    if args.len() < 3 {
+        help();
+        return;
+    }
+
+    match args[1].as_str() {
+        "--color" => {
+            let color = args[2].parse::<i32>().unwrap_or_else(|_| {
+                help();
+                std::process::exit(1);
+            });
+
+            let code = match color {
+                31 => RED,
+                32 => GREEN,
+                33 => YELLOW,
+                34 => BLUE,
+                _ => {
+                    help();
+                    return;
+                }
+            };
+            COLOR = code;
+        }
+        _ => {
+            help();
+            return;
+        },
+    }
+
     let mut player_dir: i32;
     let mut head_x: i32;
     let mut head_y: i32;
