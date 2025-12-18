@@ -2,6 +2,8 @@ use std::io::{self, Write, Read};
 use std::time::Duration;
 use std::thread;
 use std::env;
+use std::collections::HashSet;
+use rand::Rng;
 
 fn initialize_terminal() {
     print!("\x1b[?1049h");
@@ -53,6 +55,39 @@ fn get_terminal_size() -> (i32, i32) {
 
 fn sleep_for_frame_time() {
     thread::sleep(Duration::from_millis(100));
+}
+
+fn place_random(blacklist: &[(usize, usize, i32)], width: usize, height: usize) -> Option<(usize, usize)> {
+    let mut rng = rand::thread_rng();
+    
+    let occupied: HashSet<(usize, usize)> = blacklist
+        .iter()
+        .map(|&(x, y, _)| (x, y))
+        .collect();
+    
+    let total_cells = width * height;
+    if occupied.len() < total_cells / 2 {
+        for _ in 0..total_cells {
+            let x = rng.gen_range(0..width);
+            let y = rng.gen_range(0..height);
+            
+            if !occupied.contains(&(x, y)) {
+                return Some((x, y));
+            }
+        }
+    } else {
+        let valid: Vec<(usize, usize)> = (0..height)
+            .flat_map(|y| (0..width).map(move |x| (x, y)))
+            .filter(|pos| !occupied.contains(pos))
+            .collect();
+        
+        if !valid.is_empty() {
+            let idx = rng.gen_range(0..valid.len());
+            return Some(valid[idx]);
+        }
+    }
+    
+    None
 }
 
 fn read_key() -> Option<String> {
@@ -149,6 +184,7 @@ fn main() {
     const GRAY: i32 = 90;
     const NEUTRAL: i32 = 0;
     let mut COLOR: i32 = NEUTRAL;
+    let mut FRUIT_ON_FIELD: bool = false;
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 3 {
@@ -186,7 +222,7 @@ fn main() {
     let mut head_y: i32;
 
     let mut body: Vec<(i32, i32, i32)> = Vec::new();
-    let max_length: usize = 20;
+    let mut snake_length: usize = 20;
 
     initialize_terminal();
     let (grid_width, grid_height) = get_terminal_size();
@@ -194,6 +230,7 @@ fn main() {
     head_x = grid_width / 2;
     head_y = grid_height / 2;
     player_dir = RIGHT;
+    let mut current_fruit: (i32, i32) = (0, 0);
 
     draw_border(grid_width, grid_height, COLOR);
 
@@ -201,6 +238,10 @@ fn main() {
         sleep_for_frame_time();
 
         draw_area(grid_width, grid_height, GRAY);
+
+        if FRUIT_ON_FIELD {
+            draw_char(current_fruit.0, current_fruit.1, 'o', COLOR);
+        }
 
         if let Some(key) = read_key() {
             let next_dir = match key.as_str() {
@@ -240,13 +281,28 @@ fn main() {
 
         body.push((head_x, head_y, player_dir));
 
-        if body.len() > max_length {
+        if body.len() > snake_length {
             body.remove(0);
         }
 
+        if !(FRUIT_ON_FIELD) {
+            let body_usize: Vec<(usize, usize, i32)> = body
+                .iter()
+                .map(|&(x, y, dir)| (x as usize, y as usize, dir))
+                .collect();
+
+            if let Some((fruit_x, fruit_y)) = place_random(&body_usize, (grid_width - 1).try_into().unwrap(), (grid_height - 1).try_into().unwrap()) {
+                current_fruit = (fruit_x.try_into().unwrap(), fruit_y.try_into().unwrap());
+                FRUIT_ON_FIELD = true;
+            }
+        }
 
         for i in 0..body.len().saturating_sub(1) {
             let (x, y, dir) = body[i];
+            if x == current_fruit.0 && y == current_fruit.1 {
+                FRUIT_ON_FIELD = false;
+                snake_length += 1;
+            }
             let next_dir = if i + 1 < body.len() {
                 body[i + 1].2
             } else {
