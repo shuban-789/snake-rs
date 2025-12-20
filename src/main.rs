@@ -233,14 +233,13 @@ fn main() {
     let mut current_fruit: (i32, i32) = (0, 0);
 
     draw_border(grid_width, grid_height, COLOR);
+    draw_area(grid_width, grid_height, GRAY);
 
     loop {
         sleep_for_frame_time();
 
-        draw_area(grid_width, grid_height, GRAY);
-
         if FRUIT_ON_FIELD {
-            draw_char(current_fruit.0, current_fruit.1, 'o', COLOR);
+            draw_char(current_fruit.0, current_fruit.1, 'O', COLOR);
         }
 
         if let Some(key) = read_key() {
@@ -281,9 +280,12 @@ fn main() {
 
         body.push((head_x, head_y, player_dir));
 
-        if body.len() > snake_length {
-            body.remove(0);
-        }
+        let old_tail = if body.len() > snake_length {
+            let tail = body.remove(0);
+            Some(tail)
+        } else {
+            None
+        };
 
         if !(FRUIT_ON_FIELD) {
             let body_usize: Vec<(usize, usize, i32)> = body
@@ -291,10 +293,14 @@ fn main() {
                 .map(|&(x, y, dir)| (x as usize, y as usize, dir))
                 .collect();
 
-            if let Some((fruit_x, fruit_y)) = place_random(&body_usize, (grid_width - 1).try_into().unwrap(), (grid_height - 1).try_into().unwrap()) {
-                current_fruit = (fruit_x.try_into().unwrap(), fruit_y.try_into().unwrap());
+            if let Some((fruit_x, fruit_y)) = place_random(&body_usize, (grid_width - 2).try_into().unwrap(), (grid_height - 2).try_into().unwrap()) {
+                current_fruit = ((fruit_x as i32) + 1, (fruit_y as i32) + 1);
                 FRUIT_ON_FIELD = true;
             }
+        }
+
+         if let Some((tail_x, tail_y, _)) = old_tail {
+            draw_char(tail_x, tail_y, '+', GRAY);
         }
 
         for i in 0..body.len().saturating_sub(1) {
